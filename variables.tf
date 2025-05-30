@@ -22,20 +22,6 @@ variable "ipam_pool_cidr" {
   default     = "10.0.0.0/8"
 }
 
-variable "instance_types" {
-  description = "Instance types for different flavors"
-  type        = map(string)
-  default = {
-    flavor1 = "t3.micro"
-    flavor2 = "t3.small"
-  }
-}
-
-variable "key_pair_name" {
-  description = "EC2 key pair name"
-  type        = string
-}
-
 variable "allowed_ssh_cidrs" {
   description = "CIDR blocks allowed for SSH access"
   type        = list(string)
