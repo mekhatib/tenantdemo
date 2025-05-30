@@ -13,16 +13,6 @@ output "transit_gateway_id" {
   value       = module.transit_gateway.tgw_id
 }
 
-output "instance_ids" {
-  description = "IDs of the EC2 instances"
-  value       = module.ec2_instances.instance_ids
-}
-
-output "instance_private_ips" {
-  description = "Private IPs of the EC2 instances"
-  value       = module.ec2_instances.private_ips
-}
-
 output "security_group_ids" {
   description = "Security group IDs"
   value = {
