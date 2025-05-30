@@ -31,17 +31,7 @@ output "security_group_ids" {
   }
 }
 
-output "service_catalog_portfolio_id" {
-  description = "Service Catalog portfolio ID"
-  value       = module.service_catalog.portfolio_id
-}
-
-output "config_recorder_name" {
-  description = "AWS Config recorder name"
-  value       = module.drift_detection.config_recorder_name
-}
-
 output "ipam_pool_id" {
-  description = "IPAM pool ID for subnet allocation"
-  value       = module.ipam.subnet_pool_id
+  description = "The ID of the IPAM pool used for VPC allocation"
+  value       = module.ipam.vpc_ipam_pool_id
 }
