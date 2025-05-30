@@ -80,4 +80,4 @@ variable "config_rules" {
     })
   }))
   default = {} # Empty map - will use the module's defaults
-}
+}  
