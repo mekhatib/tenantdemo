@@ -65,3 +65,9 @@ variable "config_rules" {
   }))
   default = {} # Empty map - will use the module's defaults
 }  
+
+variable "tfc_organization" {
+  description = "Terraform Cloud organization name"
+  type        = string
+  default     = "test-khatib"
+}
