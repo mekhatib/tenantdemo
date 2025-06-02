@@ -1,11 +1,13 @@
 variable "environment" {
   description = "Environment name"
   type        = string
+  default     = "dev"
 }
 
 variable "project_name" {
   description = "Project name"
   type        = string
+  default     = "rfp-poc"
 }
 
 variable "aws_region" {
@@ -35,39 +37,4 @@ variable "cost_center" {
 variable "owner_email" {
   description = "Owner email for notifications"
   type        = string
-}
-
-variable "alert_email" {
-  description = "Email for monitoring alerts"
-  type        = string
-}
-
-variable "enable_auto_remediation" {
-  description = "Enable automatic drift remediation"
-  type        = bool
-  default     = false
-}
-
-variable "config_rules" {
-  description = "AWS Config rules to create"
-  type = map(object({
-    description                 = string
-    source_owner               = string
-    source_identifier          = string
-    input_parameters           = string
-    maximum_execution_frequency = string
-    scope = object({
-      compliance_resource_id    = string
-      compliance_resource_types = list(string)
-      tag_key                  = string
-      tag_value                = string
-    })
-  }))
-  default = {} # Empty map - will use the module's defaults
-}  
-
-variable "tfc_organization" {
-  description = "Terraform Cloud organization name"
-  type        = string
-  default     = "test-khatib"
 }
