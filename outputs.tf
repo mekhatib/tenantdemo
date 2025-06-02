@@ -25,3 +25,24 @@ output "ipam_pool_id" {
   description = "The ID of the IPAM pool used for VPC allocation"
   value       = module.ipam.vpc_ipam_pool_id
 }
+
+# Workspace Information
+output "workspace_name" {
+  description = "Name of the current Terraform workspace"
+  value       = terraform.workspace
+}
+
+output "tfc_organization" {
+  description = "Terraform Cloud organization name"
+  value       = var.tfc_organization  # You need to add this variable to your base infrastructure
+}
+
+output "workspace_id" {
+  description = "Terraform Cloud workspace ID"
+  value       = data.tfe_workspace.current.id
+}
+
+output "workspace_full_name" {
+  description = "Full workspace name for remote state reference"
+  value       = "${var.tfc_organization}/${terraform.workspace}"
+}
