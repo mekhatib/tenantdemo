@@ -9,6 +9,11 @@ data "aws_availability_zones" "available" {
   state = "available"
 }
 
+data "tfe_workspace" "current" {
+  name         = terraform.workspace
+  organization = var.tfc_organization
+}
+
 # Local values
 locals {
   azs = data.aws_availability_zones.available.names
