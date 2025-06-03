@@ -85,7 +85,7 @@ module "vpc" {
   
   tags = local.common_tags
   
-  #depends_on = [module.ipam]
+  depends_on = [module.ipam]
 }
 
 # Transit Gateway Module
