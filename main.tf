@@ -256,48 +256,6 @@ resource "aws_s3_bucket_lifecycle_configuration" "flow_logs" {
   }
 }
 
-# S3 bucket policy for VPC Flow Logs
-resource "aws_s3_bucket_policy" "flow_logs" {
-  bucket = aws_s3_bucket.flow_logs.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid    = "AWSLogDeliveryWrite"
-        Effect = "Allow"
-        Principal = {
-          Service = "delivery.logs.amazonaws.com"
-        }
-        Action   = "s3:PutObject"
-        Resource = "${aws_s3_bucket.flow_logs.arn}/*"
-        Condition = {
-          StringEquals = {
-            "s3:x-acl" = "bucket-owner-full-control"
-          }
-          ArnLike = {
-            "aws:SourceArn" = "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:*"
-          }
-        }
-      },
-      {
-        Sid    = "AWSLogDeliveryAclCheck"
-        Effect = "Allow"
-        Principal = {
-          Service = "delivery.logs.amazonaws.com"
-        }
-        Action   = "s3:GetBucketAcl"
-        Resource = aws_s3_bucket.flow_logs.arn
-        Condition = {
-          ArnLike = {
-            "aws:SourceArn" = "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:*"
-          }
-        }
-      }
-    ]
-  })
-}
-
 # VPC Flow Log
 resource "aws_flow_log" "main" {
   log_destination      = aws_s3_bucket.flow_logs.arn
@@ -316,8 +274,6 @@ resource "aws_flow_log" "main" {
       Name = "${var.project_name}-${var.environment}-flow-log"
     }
   )
-  
-  depends_on = [aws_s3_bucket_policy.flow_logs]
 }
 
 # Security Groups Module
