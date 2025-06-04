@@ -274,7 +274,9 @@ resource "aws_s3_bucket_policy" "flow_logs" {
         Condition = {
           StringEquals = {
             "s3:x-acl" = "bucket-owner-full-control"
-            "aws:SourceAccount" = data.aws_caller_identity.current.account_id
+          }
+          ArnLike = {
+            "aws:SourceArn" = "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:*"
           }
         }
       },
@@ -287,8 +289,8 @@ resource "aws_s3_bucket_policy" "flow_logs" {
         Action   = "s3:GetBucketAcl"
         Resource = aws_s3_bucket.flow_logs.arn
         Condition = {
-          StringEquals = {
-            "aws:SourceAccount" = data.aws_caller_identity.current.account_id
+          ArnLike = {
+            "aws:SourceArn" = "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:*"
           }
         }
       }
