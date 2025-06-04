@@ -72,10 +72,7 @@ module "resource_tags" {
   environment  = var.environment
   project_name = var.project_name
   
-  vlan_allocations = {
-    subnet_1 = 100
-    subnet_2 = 200
-  }
+  vlan_allocations = var.vlan_tags
   
   asn_allocations = local.bgp_asns
 }
@@ -94,7 +91,7 @@ module "vpc" {
   vpc_netmask_length = 20  # /20 VPC (4096 IPs)
   
   subnet_types = ["private", "public"]
-  vlan_tags    = ["100", "200"]
+  vlan_tags    = [for k, v in var.vlan_tags : tostring(v)]
   
   enable_dns_hostnames = true
   enable_dns_support   = true
@@ -237,11 +234,18 @@ resource "aws_ec2_transit_gateway_route" "sdn_default" {
 resource "aws_route" "private_to_tgw" {
   count = length(module.vpc.private_subnet_ids)
   
-  route_table_id         = module.vpc.private_route_table_ids[count.index]
+  route_table_id         = data.aws_route_table.private[count.index].id
   destination_cidr_block = "10.0.0.0/8"  # Corporate network
   transit_gateway_id     = aws_ec2_transit_gateway.main.id
   
   depends_on = [aws_ec2_transit_gateway_vpc_attachment.main]
+}
+
+# Data source to get private route tables
+data "aws_route_table" "private" {
+  count = length(module.vpc.private_subnet_ids)
+  
+  subnet_id = module.vpc.private_subnet_ids[count.index]
 }
 
 # Route53 Private Hosted Zone - IPAM/DNS Management
@@ -291,6 +295,10 @@ resource "aws_s3_bucket_lifecycle_configuration" "flow_logs" {
 
     expiration {
       days = 30
+    }
+    
+    filter {
+      prefix = "flow-logs/"
     }
   }
 }
@@ -445,19 +453,12 @@ resource "aws_vpn_connection" "main" {
   )
 }
 
-# VPN Attachment to Transit Gateway
-resource "aws_ec2_transit_gateway_vpn_attachment" "main" {
+# VPN Attachment to Transit Gateway route table
+resource "aws_ec2_transit_gateway_route_table_association" "vpn" {
   count = var.enable_bgp_vpn ? 1 : 0
   
-  transit_gateway_id = aws_ec2_transit_gateway.main.id
-  vpn_connection_id  = aws_vpn_connection.main[0].id
-  
-  tags = merge(
-    local.common_tags,
-    {
-      Name = "${var.project_name}-${var.environment}-vpn-attach"
-    }
-  )
+  transit_gateway_attachment_id  = aws_vpn_connection.main[0].transit_gateway_attachment_id
+  transit_gateway_route_table_id = aws_ec2_transit_gateway_route_table.dcgw.id
 }
 
 # State sharing configuration documentation
@@ -487,7 +488,7 @@ resource "local_file" "state_sharing_config" {
       cloud_layer = {
         vpc_id = module.vpc.vpc_id
         subnet_ids = module.vpc.subnet_ids
-        vlan_tags = module.resource_tags.vlan_allocations
+        vlan_tags = var.vlan_tags  # Use variable instead of module output
       }
     }
   })
