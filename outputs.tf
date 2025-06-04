@@ -37,7 +37,7 @@ output "public_route_table_id" {
 # DCGW Layer Outputs
 output "internet_gateway_id" {
   description = "ID of the Internet Gateway (DCGW simulation)"
-  value       = local.internet_gateway_id
+  value       = aws_internet_gateway.main.id
 }
 
 output "transit_gateway_id" {
@@ -159,7 +159,7 @@ output "architecture_summary" {
   value = {
     dcgw_layer = {
       transit_gateway = aws_ec2_transit_gateway.main.id
-      internet_gateway = local.internet_gateway_id
+      internet_gateway = aws_internet_gateway.main.id
       bgp_asn = local.bgp_asns.tgw
     }
     sdn_layer = {
