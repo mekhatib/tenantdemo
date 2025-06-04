@@ -54,7 +54,7 @@ variable "infrastructure_workspace_name" {
 variable "tfe_token" {
   description = "Terraform Cloud API token"
   type        = string
-  sensitive   = true
+  #sensitive   = true
 }
 
 variable "enable_global_state_sharing" {
