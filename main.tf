@@ -104,8 +104,18 @@ module "vpc" {
   depends_on = [module.ipam]
 }
 
-# Internet Gateway - DCGW Layer Component
+# Check if Internet Gateway already exists
+data "aws_internet_gateways" "existing" {
+  filter {
+    name   = "attachment.vpc-id"
+    values = [module.vpc.vpc_id]
+  }
+}
+
+# Internet Gateway - DCGW Layer Component (only create if doesn't exist)
 resource "aws_internet_gateway" "main" {
+  count = length(data.aws_internet_gateways.existing.ids) == 0 ? 1 : 0
+  
   vpc_id = module.vpc.vpc_id
 
   tags = merge(
@@ -117,8 +127,25 @@ resource "aws_internet_gateway" "main" {
   )
 }
 
-# Public Route Table for Internet Gateway
+# Use existing or new Internet Gateway
+locals {
+  internet_gateway_id = length(data.aws_internet_gateways.existing.ids) > 0 ? data.aws_internet_gateways.existing.ids[0] : aws_internet_gateway.main[0].id
+}
+
+# Check if public subnets already have route table associations
+data "aws_route_tables" "vpc_route_tables" {
+  vpc_id = module.vpc.vpc_id
+  
+  filter {
+    name   = "association.main"
+    values = ["false"]
+  }
+}
+
+# Public Route Table for Internet Gateway (only if needed)
 resource "aws_route_table" "public" {
+  count = length(module.vpc.public_subnet_ids) > 0 ? 1 : 0
+  
   vpc_id = module.vpc.vpc_id
 
   tags = merge(
@@ -131,17 +158,31 @@ resource "aws_route_table" "public" {
 
 # Route to Internet Gateway
 resource "aws_route" "public_internet" {
-  route_table_id         = aws_route_table.public.id
+  count = length(module.vpc.public_subnet_ids) > 0 ? 1 : 0
+  
+  route_table_id         = aws_route_table.public[0].id
   destination_cidr_block = "0.0.0.0/0"
-  gateway_id             = aws_internet_gateway.main.id
+  gateway_id             = local.internet_gateway_id
 }
 
-# Associate public subnets with public route table
+# Get existing route table associations for public subnets
+data "aws_route_table" "public_subnet_existing" {
+  count = length(module.vpc.public_subnet_ids)
+  
+  subnet_id = module.vpc.public_subnet_ids[count.index]
+}
+
+# Only create new associations if subnet doesn't have a custom route table
 resource "aws_route_table_association" "public" {
   count = length(module.vpc.public_subnet_ids)
   
   subnet_id      = module.vpc.public_subnet_ids[count.index]
-  route_table_id = aws_route_table.public.id
+  route_table_id = aws_route_table.public[0].id
+  
+  # Only create if the subnet is using the main route table
+  lifecycle {
+    ignore_changes = [route_table_id]
+  }
 }
 
 # Enhanced Transit Gateway - DCGW/SDN Layer
@@ -334,7 +375,8 @@ resource "aws_iam_role_policy" "flow_log" {
         Action = [
           "s3:PutObject",
           "s3:GetObject",
-          "s3:ListBucket"
+          "s3:ListBucket",
+          "s3:GetBucketLocation"
         ]
         Effect = "Allow"
         Resource = [
@@ -350,8 +392,14 @@ resource "aws_iam_role_policy" "flow_log" {
 resource "aws_flow_log" "main" {
   iam_role_arn    = aws_iam_role.flow_log.arn
   log_destination = aws_s3_bucket.flow_logs.arn
+  log_destination_type = "s3"
   traffic_type    = "ALL"
   vpc_id          = module.vpc.vpc_id
+
+  destination_options {
+    file_format        = "parquet"
+    per_hour_partition = true
+  }
 
   tags = merge(
     local.common_tags,
