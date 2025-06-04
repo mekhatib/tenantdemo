@@ -31,13 +31,13 @@ output "private_route_table_ids" {
 
 output "public_route_table_id" {
   description = "Public route table ID"
-  value       = aws_route_table.public.id
+  value       = length(aws_route_table.public) > 0 ? aws_route_table.public[0].id : null
 }
 
 # DCGW Layer Outputs
 output "internet_gateway_id" {
   description = "ID of the Internet Gateway (DCGW simulation)"
-  value       = aws_internet_gateway.main.id
+  value       = local.internet_gateway_id
 }
 
 output "transit_gateway_id" {
@@ -159,7 +159,7 @@ output "architecture_summary" {
   value = {
     dcgw_layer = {
       transit_gateway = aws_ec2_transit_gateway.main.id
-      internet_gateway = aws_internet_gateway.main.id
+      internet_gateway = local.internet_gateway_id
       bgp_asn = local.bgp_asns.tgw
     }
     sdn_layer = {
