@@ -77,7 +77,7 @@ module "resource_tags" {
   asn_allocations = local.bgp_asns
 }
 
-# VPC Module - Cloud Layer
+# VPC Module - Cloud Layer (includes Internet Gateway and Route Tables)
 module "vpc" {
   source  = "app.terraform.io/test-khatib/vpc/aws"
   version = "~> 0.0"
@@ -102,72 +102,6 @@ module "vpc" {
   tags = local.common_tags
   
   depends_on = [module.ipam]
-}
-
-# Check for existing Internet Gateway attached to VPC
-data "aws_vpc" "current" {
-  id = module.vpc.vpc_id
-}
-
-# Internet Gateway - DCGW Layer Component
-resource "aws_internet_gateway" "main" {
-  vpc_id = module.vpc.vpc_id
-
-  tags = merge(
-    local.common_tags,
-    {
-      Name  = "${var.project_name}-${var.environment}-igw"
-      Layer = "DCGW"
-    }
-  )
-  
-  # If IGW already exists, import it rather than create
-  lifecycle {
-    ignore_changes = [vpc_id]
-  }
-}
-
-# Check if public subnets already have custom route table associations
-data "aws_route_table" "public_subnet_existing" {
-  count = length(module.vpc.public_subnet_ids)
-  
-  subnet_id = module.vpc.public_subnet_ids[count.index]
-}
-
-# Public Route Table for Internet Gateway (only if needed)
-resource "aws_route_table" "public" {
-  count = length(module.vpc.public_subnet_ids) > 0 ? 1 : 0
-  
-  vpc_id = module.vpc.vpc_id
-
-  tags = merge(
-    local.common_tags,
-    {
-      Name = "${var.project_name}-${var.environment}-public-rt"
-    }
-  )
-}
-
-# Route to Internet Gateway
-resource "aws_route" "public_internet" {
-  count = length(module.vpc.public_subnet_ids) > 0 ? 1 : 0
-  
-  route_table_id         = aws_route_table.public[0].id
-  destination_cidr_block = "0.0.0.0/0"
-  gateway_id             = aws_internet_gateway.main.id
-}
-
-# Only create new associations if subnet doesn't have a custom route table
-resource "aws_route_table_association" "public" {
-  count = length(module.vpc.public_subnet_ids)
-  
-  subnet_id      = module.vpc.public_subnet_ids[count.index]
-  route_table_id = aws_route_table.public[0].id
-  
-  # Only create if the subnet is using the main route table
-  lifecycle {
-    ignore_changes = [route_table_id]
-  }
 }
 
 # Enhanced Transit Gateway - DCGW/SDN Layer
@@ -256,22 +190,15 @@ resource "aws_ec2_transit_gateway_route" "sdn_default" {
   blackhole = true  # Placeholder until VPN/DX is configured
 }
 
-# VPC Routes to Transit Gateway
+# Add routes to Transit Gateway in private subnets
 resource "aws_route" "private_to_tgw" {
   count = length(module.vpc.private_subnet_ids)
   
-  route_table_id         = data.aws_route_table.private[count.index].id
+  route_table_id         = module.vpc.private_route_table_ids[count.index]
   destination_cidr_block = "10.0.0.0/8"  # Corporate network
   transit_gateway_id     = aws_ec2_transit_gateway.main.id
   
   depends_on = [aws_ec2_transit_gateway_vpc_attachment.main]
-}
-
-# Data source to get private route tables
-data "aws_route_table" "private" {
-  count = length(module.vpc.private_subnet_ids)
-  
-  subnet_id = module.vpc.private_subnet_ids[count.index]
 }
 
 # Route53 Private Hosted Zone - IPAM/DNS Management
@@ -329,45 +256,41 @@ resource "aws_s3_bucket_lifecycle_configuration" "flow_logs" {
   }
 }
 
-# IAM role for Flow Logs
-resource "aws_iam_role" "flow_log" {
-  name = "${var.project_name}-${var.environment}-flow-log-role"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action = "sts:AssumeRole"
-        Effect = "Allow"
-        Principal = {
-          Service = "vpc-flow-logs.amazonaws.com"
-        }
-      }
-    ]
-  })
-
-  tags = local.common_tags
-}
-
-resource "aws_iam_role_policy" "flow_log" {
-  name = "${var.project_name}-${var.environment}-flow-log-policy"
-  role = aws_iam_role.flow_log.id
+# S3 bucket policy for VPC Flow Logs
+resource "aws_s3_bucket_policy" "flow_logs" {
+  bucket = aws_s3_bucket.flow_logs.id
 
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
       {
-        Action = [
-          "s3:PutObject",
-          "s3:GetObject",
-          "s3:ListBucket",
-          "s3:GetBucketLocation"
-        ]
+        Sid    = "AWSLogDeliveryWrite"
         Effect = "Allow"
-        Resource = [
-          aws_s3_bucket.flow_logs.arn,
-          "${aws_s3_bucket.flow_logs.arn}/*"
-        ]
+        Principal = {
+          Service = "delivery.logs.amazonaws.com"
+        }
+        Action   = "s3:PutObject"
+        Resource = "${aws_s3_bucket.flow_logs.arn}/*"
+        Condition = {
+          StringEquals = {
+            "s3:x-acl" = "bucket-owner-full-control"
+            "aws:SourceAccount" = data.aws_caller_identity.current.account_id
+          }
+        }
+      },
+      {
+        Sid    = "AWSLogDeliveryAclCheck"
+        Effect = "Allow"
+        Principal = {
+          Service = "delivery.logs.amazonaws.com"
+        }
+        Action   = "s3:GetBucketAcl"
+        Resource = aws_s3_bucket.flow_logs.arn
+        Condition = {
+          StringEquals = {
+            "aws:SourceAccount" = data.aws_caller_identity.current.account_id
+          }
+        }
       }
     ]
   })
@@ -375,11 +298,10 @@ resource "aws_iam_role_policy" "flow_log" {
 
 # VPC Flow Log
 resource "aws_flow_log" "main" {
-  iam_role_arn    = aws_iam_role.flow_log.arn
-  log_destination = aws_s3_bucket.flow_logs.arn
+  log_destination      = aws_s3_bucket.flow_logs.arn
   log_destination_type = "s3"
-  traffic_type    = "ALL"
-  vpc_id          = module.vpc.vpc_id
+  traffic_type        = "ALL"
+  vpc_id              = module.vpc.vpc_id
 
   destination_options {
     file_format        = "parquet"
@@ -392,6 +314,8 @@ resource "aws_flow_log" "main" {
       Name = "${var.project_name}-${var.environment}-flow-log"
     }
   )
+  
+  depends_on = [aws_s3_bucket_policy.flow_logs]
 }
 
 # Security Groups Module
@@ -508,7 +432,7 @@ resource "local_file" "state_sharing_config" {
     networking_components = {
       dcgw_layer = {
         transit_gateway_id = aws_ec2_transit_gateway.main.id
-        internet_gateway_id = aws_internet_gateway.main.id
+        internet_gateway_id = module.vpc.internet_gateway_id
         bgp_asn = local.bgp_asns.tgw
       }
       sdn_layer = {
@@ -521,7 +445,7 @@ resource "local_file" "state_sharing_config" {
       cloud_layer = {
         vpc_id = module.vpc.vpc_id
         subnet_ids = module.vpc.subnet_ids
-        vlan_tags = var.vlan_tags  # Use variable instead of module output
+        vlan_tags = var.vlan_tags
       }
     }
   })
