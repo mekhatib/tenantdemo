@@ -26,7 +26,7 @@ output "all_subnet_ids" {
 
 output "private_route_table_ids" {
   description = "Private route table IDs"
-  value       = module.vpc.private_route_table_ids
+  value       = [for rt in data.aws_route_table.private : rt.id]
 }
 
 output "public_route_table_id" {
@@ -128,7 +128,7 @@ output "bgp_asn_allocation" {
 # VLAN Information
 output "vlan_allocations" {
   description = "VLAN tag allocations"
-  value       = module.resource_tags.vlan_allocations
+  value       = var.vlan_tags
 }
 
 # Common tags for compute module
@@ -175,7 +175,7 @@ output "architecture_summary" {
         private = module.vpc.private_subnet_ids
         public  = module.vpc.public_subnet_ids
       }
-      vlan_tags = module.resource_tags.vlan_allocations
+      vlan_tags = var.vlan_tags
     }
     ipam_dns = {
       ipam_pool = module.ipam.vpc_ipam_pool_id
