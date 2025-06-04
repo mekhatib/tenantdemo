@@ -93,3 +93,12 @@ variable "enable_multicast" {
   type        = bool
   default     = false
 }
+
+variable "vlan_tags" {
+  description = "VLAN tag allocations for subnets"
+  type        = map(number)
+  default = {
+    subnet_1 = 100
+    subnet_2 = 200
+  }
+}
